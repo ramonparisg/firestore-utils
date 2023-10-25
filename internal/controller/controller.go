@@ -135,7 +135,7 @@ func populateDataWithSelectedFields(response map[string]interface{}, selectedFie
 				if fieldFound(rowKey, fieldFormatted) {
 					rowValue := getRowValue(field, row, rowKey)
 					if valueIsArray(rowValue) {
-						arrayValue := row.(map[string]interface{})[rowKey].([]interface{})
+						arrayValue := rowValue.([]interface{})
 						if isLastValue(fields) {
 							m := make([]map[string]interface{}, len(arrayValue))
 							for key, val := range arrayValue {
@@ -188,13 +188,30 @@ func getRowValue(field string, row interface{}, rowKey string) interface{} {
 			}
 		} else if isN(index) {
 			rowValue = arrayValue
-		} else { // has condition
-
+		} else if hasCondition(index) {
+			splitCondition := strings.Split(index, "=")
+			fieldToFind := strings.Trim(splitCondition[0], " ")
+			valueToMatch := strings.Trim(splitCondition[1], " ")
+			var filteredArray []interface{}
+			for _, value := range arrayValue {
+				for key, keyVal := range value.(map[string]interface{}) {
+					if fieldFound(key, fieldToFind) {
+						if strings.EqualFold(keyVal.(string), valueToMatch) {
+							filteredArray = append(filteredArray, value.(map[string]interface{}))
+						}
+					}
+				}
+			}
+			rowValue = filteredArray
 		}
 	} else {
 		rowValue = row.(map[string]interface{})[rowKey]
 	}
 	return rowValue
+}
+
+func hasCondition(index string) bool {
+	return strings.Contains(index, "=")
 }
 
 func fieldIsArray(field string, row interface{}, rowKey string) bool {
