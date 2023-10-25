@@ -5,6 +5,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"log"
 	"net/http"
+	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -93,24 +95,74 @@ func filterSelectedFields(selected map[string]string, rows []interface{}) []inte
 		data := make(map[string]interface{})
 		populateDataWithSelectedFields(data, selectedMapped, row)
 
+		flatNestedFields(data)
+
 		response = append(response, data)
 	}
 
 	return response
 }
 
+func flatNestedFields(data map[string]interface{}) {
+	for key := range data {
+		field := data[key]
+		if reflect.TypeOf(field).Kind() == reflect.Slice {
+			var values []interface{}
+			for _, v := range field.([]map[string]interface{}) {
+				if v == nil {
+					continue
+				}
+
+				if len(v) == 1 {
+					for nestedKey := range v {
+						values = append(values, v[nestedKey])
+					}
+				} else {
+					values = append(values, v)
+				}
+			}
+			data[key] = values
+		}
+	}
+}
+
 func populateDataWithSelectedFields(response map[string]interface{}, selectedFields map[string][]string, row interface{}) interface{} {
 	for responseKey := range selectedFields {
-		fieldMaps := selectedFields[responseKey]
-		for i, field := range fieldMaps {
+		fields := selectedFields[responseKey]
+		for i, field := range fields {
 			for rowKey := range row.(map[string]interface{}) {
-				if strings.EqualFold(rowKey, field) {
-					rowValue := row.(map[string]interface{})[rowKey]
-					if isLastValue(fieldMaps) {
-						response[responseKey] = rowValue
-					} else if isNestedValue(i, fieldMaps) {
-						fieldsLeftToFind := map[string][]string{responseKey: fieldMaps[i+1:]}
-						populateDataWithSelectedFields(response, fieldsLeftToFind, rowValue)
+				fieldFormatted := strings.Split(field, "[")[0]
+				if fieldFound(rowKey, fieldFormatted) {
+					rowValue := getRowValue(field, row, rowKey)
+					if valueIsArray(rowValue) {
+						arrayValue := row.(map[string]interface{})[rowKey].([]interface{})
+						if isLastValue(fields) {
+							m := make([]map[string]interface{}, len(arrayValue))
+							for key, val := range arrayValue {
+								m[key] = val.(map[string]interface{})
+							}
+							response[responseKey] = m
+							break
+						} else {
+							for j, val := range arrayValue {
+								fieldsLeftToFind := map[string][]string{responseKey: fields[i+1:]}
+								if j == 0 {
+									var m []map[string]interface{}
+									for i := 0; i < len(arrayValue); i++ {
+										m = append(m, make(map[string]interface{}))
+									}
+									response[responseKey] = m
+								}
+								populateDataWithSelectedFields(response[responseKey].([]map[string]interface{})[j], fieldsLeftToFind, val)
+							}
+						}
+					} else {
+						if isLastValue(fields) {
+							response[responseKey] = rowValue
+						} else if isNestedValue(i, fields) {
+							fieldsLeftToFind := map[string][]string{responseKey: fields[i+1:]}
+							populateDataWithSelectedFields(response, fieldsLeftToFind, rowValue)
+						}
 					}
 					break
 				}
@@ -120,6 +172,53 @@ func populateDataWithSelectedFields(response map[string]interface{}, selectedFie
 
 	return nil
 
+}
+
+func getRowValue(field string, row interface{}, rowKey string) interface{} {
+	var rowValue interface{} = make(map[string]interface{})
+	if fieldIsArray(field, row, rowKey) {
+		split := strings.Split(field, "[")
+		field = split[0]
+		index := strings.ReplaceAll(split[1], "]", "")
+		arrayValue := row.(map[string]interface{})[rowKey].([]interface{})
+		if isNumeric(index) {
+			indexInt, _ := strconv.Atoi(index)
+			if len(arrayValue) > indexInt {
+				rowValue = arrayValue[indexInt]
+			}
+		} else if isN(index) {
+			rowValue = arrayValue
+		} else { // has condition
+
+		}
+	} else {
+		rowValue = row.(map[string]interface{})[rowKey]
+	}
+	return rowValue
+}
+
+func fieldIsArray(field string, row interface{}, rowKey string) bool {
+	value := row.(map[string]interface{})[rowKey]
+	return valueIsArray(value) && strings.Contains(field, "[") && strings.Contains(field, "]")
+}
+
+func valueIsArray(value interface{}) bool {
+	return reflect.TypeOf(value).Kind() == reflect.Slice
+}
+
+func isN(index string) bool {
+	return strings.EqualFold(index, "n")
+}
+
+func isNumeric(index string) bool {
+	if _, err := strconv.Atoi(index); err == nil {
+		return true
+	}
+	return false
+}
+
+func fieldFound(rowKey string, field string) bool {
+	return strings.EqualFold(rowKey, field)
 }
 
 func isNestedValue(i int, fieldMaps []string) bool {
