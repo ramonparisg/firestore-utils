@@ -192,17 +192,16 @@ func getRowValue(field string, row interface{}, rowKey string) interface{} {
 			splitCondition := strings.Split(index, "=")
 			fieldToFind := strings.Trim(splitCondition[0], " ")
 			valueToMatch := strings.Trim(splitCondition[1], " ")
-			var filteredArray []interface{}
 			for _, value := range arrayValue {
 				for key, keyVal := range value.(map[string]interface{}) {
 					if fieldFound(key, fieldToFind) {
 						if strings.EqualFold(keyVal.(string), valueToMatch) {
-							filteredArray = append(filteredArray, value.(map[string]interface{}))
+							rowValue = value.(map[string]interface{})
+							break
 						}
 					}
 				}
 			}
-			rowValue = filteredArray
 		}
 	} else {
 		rowValue = row.(map[string]interface{})[rowKey]
