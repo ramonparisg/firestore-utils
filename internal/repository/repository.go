@@ -7,5 +7,7 @@ type Filter struct {
 }
 
 type Repository interface {
-	Query(collection string, filters []Filter) ([]interface{}, error)
+	Query(collection string, filters []Filter, limit int) ([]interface{}, error)
 }
+
+var DEFAULT_LIMIT = 100

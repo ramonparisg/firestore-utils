@@ -3,6 +3,7 @@ package repository
 import (
 	"cloud.google.com/go/firestore"
 	"context"
+	"fmt"
 	"sync"
 )
 
@@ -23,7 +24,7 @@ func NewRepository(client *firestore.Client) *GenericRepository {
 	return repositorySingleton
 }
 
-func (r GenericRepository) Query(collection string, filters []Filter) ([]interface{}, error) {
+func (r GenericRepository) Query(collection string, filters []Filter, limit int) ([]interface{}, error) {
 	coll := r.firestore.Collection(collection)
 	var query firestore.Query
 	for i, filter := range filters {
@@ -34,11 +35,18 @@ func (r GenericRepository) Query(collection string, filters []Filter) ([]interfa
 		}
 	}
 
+	l := DEFAULT_LIMIT
+	if limit > 0 {
+		l = limit
+	}
+
 	results, err := query.
+		Limit(l).
 		Documents(ctx).
 		GetAll()
 
 	if err != nil {
+		fmt.Println("Error getting documents", err)
 		return nil, err
 	}
 

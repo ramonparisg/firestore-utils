@@ -42,36 +42,15 @@ func (c *Controller) RunController(r *gin.Engine) {
 		collection := g.Param("collection")
 		filters := mapToRepoFilters(request)
 
-		result, err := c.repo.Query(collection, filters)
+		result, err := c.repo.Query(collection, filters, request.Limit)
 		if err != nil {
-			g.JSON(http.StatusInternalServerError, err)
+			g.JSON(http.StatusInternalServerError, err.Error())
 			return
 		}
 
-		if len(result) == 0 || result == nil {
-			g.JSON(http.StatusNotFound, "Document(s) not found")
-		} else {
-			g.JSON(http.StatusOK, result)
-		}
-	})
-
-	r.POST("v2/query/:collection", func(g *gin.Context) {
-		var request QueryRequest
-		err := g.ShouldBindJSON(&request)
-		if err != nil || len(request.Filters) == 0 {
-			g.JSON(http.StatusInternalServerError, err)
-			log.Printf("Error %v", err)
-			return
-		}
-
-		collection := g.Param("collection")
-		filters := mapToRepoFilters(request)
-
-		result, err := c.repo.Query(collection, filters)
-		data := filterSelectedFields(request.Select, result)
-		if err != nil {
-			g.JSON(http.StatusInternalServerError, err)
-			return
+		data := result
+		if hasSelectedFields(request) {
+			data = filterSelectedFields(request.Select, result)
 		}
 
 		if len(data) == 0 || data == nil {
@@ -81,6 +60,10 @@ func (c *Controller) RunController(r *gin.Engine) {
 		}
 	})
 
+}
+
+func hasSelectedFields(request QueryRequest) bool {
+	return request.Select != nil && len(request.Select) > 0
 }
 
 func filterSelectedFields(selected map[string]string, rows []interface{}) []interface{} {
@@ -106,72 +89,94 @@ func filterSelectedFields(selected map[string]string, rows []interface{}) []inte
 func flatNestedFields(data map[string]interface{}) {
 	for key := range data {
 		field := data[key]
-		if reflect.TypeOf(field).Kind() == reflect.Slice {
-			var values []interface{}
-			for _, v := range field.([]map[string]interface{}) {
-				if v == nil {
-					continue
-				}
-
-				if len(v) == 1 {
-					for nestedKey := range v {
-						values = append(values, v[nestedKey])
+		if field != nil {
+			if reflect.TypeOf(field).Kind() == reflect.Slice {
+				var values []interface{}
+				for _, v := range field.([]map[string]interface{}) {
+					if v == nil {
+						continue
 					}
-				} else {
-					values = append(values, v)
+
+					if len(v) == 1 {
+						for nestedKey := range v {
+							values = append(values, v[nestedKey])
+						}
+					} else {
+						values = append(values, v)
+					}
 				}
+				data[key] = values
 			}
-			data[key] = values
 		}
 	}
 }
 
-func populateDataWithSelectedFields(response map[string]interface{}, selectedFields map[string][]string, row interface{}) interface{} {
-	for responseKey := range selectedFields {
-		fields := selectedFields[responseKey]
-		for i, field := range fields {
-			for rowKey := range row.(map[string]interface{}) {
-				fieldFormatted := strings.Split(field, "[")[0]
-				if fieldFound(rowKey, fieldFormatted) {
-					rowValue := getRowValue(field, row, rowKey)
-					if valueIsArray(rowValue) {
-						arrayValue := rowValue.([]interface{})
-						if isLastValue(fields) {
+/**
+ * This function will populate the response map with the selected fields from the request.
+* It will recursively iterate over the selected fields and the object to find the values.
+*/
+func populateDataWithSelectedFields(response map[string]interface{}, selectedFields map[string][]string, object interface{}) {
+	for alias := range selectedFields {
+		fieldRoutes := selectedFields[alias]
+		for i, field := range fieldRoutes {
+			for objectKey := range object.(map[string]interface{}) {
+				if valueAlreadyFound(response, alias) {
+					break
+				}
+
+				response[alias] = getDefaultValue()
+
+				if fieldFound(objectKey, field) {
+					objectValue := getRowValue(field, object, objectKey)
+					if valueIsArray(objectValue) {
+						arrayValue := objectValue.([]interface{})
+						if isLastStepInRoute(fieldRoutes) {
 							m := make([]map[string]interface{}, len(arrayValue))
 							for key, val := range arrayValue {
 								m[key] = val.(map[string]interface{})
 							}
-							response[responseKey] = m
-							break
+							response[alias] = m
 						} else {
 							for j, val := range arrayValue {
-								fieldsLeftToFind := map[string][]string{responseKey: fields[i+1:]}
-								if j == 0 {
-									var m []map[string]interface{}
-									for i := 0; i < len(arrayValue); i++ {
-										m = append(m, make(map[string]interface{}))
-									}
-									response[responseKey] = m
+								fieldsLeftToFind := map[string][]string{alias: fieldRoutes[i+1:]}
+								if isFirstFieldInArray(j) {
+									response[alias] = convertToMapInterface(arrayValue)
 								}
-								populateDataWithSelectedFields(response[responseKey].([]map[string]interface{})[j], fieldsLeftToFind, val)
+								populateDataWithSelectedFields(response[alias].([]map[string]interface{})[j], fieldsLeftToFind, val)
 							}
 						}
 					} else {
-						if isLastValue(fields) {
-							response[responseKey] = rowValue
-						} else if isNestedValue(i, fields) {
-							fieldsLeftToFind := map[string][]string{responseKey: fields[i+1:]}
-							populateDataWithSelectedFields(response, fieldsLeftToFind, rowValue)
+						if isLastStepInRoute(fieldRoutes) {
+							response[alias] = objectValue
+						} else if isNestedValue(i, fieldRoutes) {
+							fieldsLeftToFind := map[string][]string{alias: fieldRoutes[i+1:]}
+							populateDataWithSelectedFields(response, fieldsLeftToFind, objectValue)
 						}
 					}
-					break
 				}
 			}
 		}
 	}
+}
 
+func isFirstFieldInArray(j int) bool {
+	return j == 0
+}
+
+func convertToMapInterface(arrayValue []interface{}) []map[string]interface{} {
+	var m []map[string]interface{}
+	for i := 0; i < len(arrayValue); i++ {
+		m = append(m, make(map[string]interface{}))
+	}
+	return m
+}
+
+func getDefaultValue() interface{} {
 	return nil
+}
 
+func valueAlreadyFound(response map[string]interface{}, responseKey string) bool {
+	return response[responseKey] != nil
 }
 
 func getRowValue(field string, row interface{}, rowKey string) interface{} {
@@ -234,14 +239,15 @@ func isNumeric(index string) bool {
 }
 
 func fieldFound(rowKey string, field string) bool {
-	return strings.EqualFold(rowKey, field)
+	fieldFormatted := strings.Split(field, "[")[0]
+	return strings.EqualFold(rowKey, fieldFormatted)
 }
 
 func isNestedValue(i int, fieldMaps []string) bool {
 	return i+1 < len(fieldMaps)
 }
 
-func isLastValue(fieldMaps []string) bool {
+func isLastStepInRoute(fieldMaps []string) bool {
 	return len(fieldMaps) == 1
 }
 
