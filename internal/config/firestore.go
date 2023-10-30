@@ -4,6 +4,7 @@ import (
 	"cloud.google.com/go/firestore"
 	"context"
 	"log"
+	"os"
 	"sync"
 )
 
@@ -19,7 +20,7 @@ func GetFirestoreClient() *firestore.Client {
 
 func createClient(ctx context.Context) *firestore.Client {
 	// Sets your Google Cloud Platform project ID.
-	projectID := "tot-corp-orion-stock-prd"
+	projectID := os.Getenv("PROJECT_ID")
 
 	client, err := firestore.NewClient(ctx, projectID)
 	if err != nil {

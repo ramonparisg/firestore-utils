@@ -2,6 +2,9 @@
 
 API for fetching data in Datastore dynamically in json format.
 
+## Environment variables
+PROJECT_ID = Project ID in GCP <br/>
+
 ## Endpoints
 
 **POST** /query/:collectionName
