@@ -4,6 +4,7 @@ import (
 	"cloud.google.com/go/firestore"
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 )
 
@@ -27,7 +28,8 @@ func NewRepository(client *firestore.Client) *GenericRepository {
 const chunkSize = 30
 
 func (r GenericRepository) Query(collection string, filters []Filter, limit int) ([]interface{}, error) {
-	coll := r.firestore.Collection(collection)
+	coll := r.getCollection(collection)
+
 	hasInCondition, filterInCondition := getFilterWithInCondition(filters)
 	if hasInCondition {
 		results, err := r.queryWithChunks(filters, filterInCondition, coll, limit)
@@ -37,6 +39,17 @@ func (r GenericRepository) Query(collection string, filters []Filter, limit int)
 		return results, nil
 	}
 	return r.runQuery(filters, coll, limit)
+}
+
+func (r GenericRepository) getCollection(collection string) *firestore.CollectionRef {
+	// todo refactor and make it more dynamic
+	split := strings.Split(collection, "/")
+	var coll *firestore.CollectionRef
+	coll = r.firestore.Collection(split[0])
+	if len(split) == 3 {
+		coll = coll.Doc(split[1]).Collection(split[2])
+	}
+	return coll
 }
 
 func (r GenericRepository) queryWithChunks(filters []Filter, filterInCondition *Filter, coll *firestore.CollectionRef, limit int) ([]interface{}, error) {
@@ -78,7 +91,7 @@ func duplicateWithChangedFirstValue(filters []Filter, newValue interface{}) []Fi
 }
 
 func (r GenericRepository) runQuery(filters []Filter, coll *firestore.CollectionRef, limit int) ([]interface{}, error) {
-	var query firestore.Query
+	query := coll.Limit(DEFAULT_LIMIT)
 	for i, filter := range filters {
 		value := filter.Value
 		if filter.Operation == "in" {

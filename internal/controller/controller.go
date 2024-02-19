@@ -30,19 +30,18 @@ func NewController(repo repository.Repository) *Controller {
 }
 
 func (c *Controller) RunController(r *gin.Engine) {
-	r.POST("/query/:collection", func(g *gin.Context) {
+	r.POST("/query", func(g *gin.Context) {
 		var request QueryRequest
 		err := g.ShouldBindJSON(&request)
-		if err != nil || len(request.Filters) == 0 {
+		if err != nil {
 			g.JSON(http.StatusInternalServerError, err)
 			log.Printf("Error %v", err)
 			return
 		}
 
-		collection := g.Param("collection")
 		filters := mapToRepoFilters(request)
 
-		result, err := c.repo.Query(collection, filters, request.Limit)
+		result, err := c.repo.Query(request.Collection, filters, request.Limit)
 		if err != nil {
 			g.JSON(http.StatusInternalServerError, err.Error())
 			return

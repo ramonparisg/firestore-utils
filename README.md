@@ -7,10 +7,8 @@ PROJECT_ID = Project ID in GCP <br/>
 
 ## Endpoints
 
-**POST** /query/:collectionName
+**POST** /query
 
-#### Parameters:
-- **collectionName**: Name of the collection in Datastore
 
 #### Body:
 - **select**: (Optional. If not send, returns whole json) Fields to be selected. The key is the name of the field in the response and the value is the name of the field in Datastore. If the field is nested, the name of the field in Datastore must be separated by dots. Example: "delivery.deliveryPC". If the field is an array, the name of the field in Datastore must be followed by the index of the array, letter N for selecting all or a condition to find a specific object within the array . 
@@ -33,6 +31,7 @@ Will give first deliveryOrder, all reservations and the value of the first eleme
 curl --location 'http://localhost:8080/query/:collectionName' \
 --header 'Content-Type: application/json' \
 --data '{
+   "collection": "Collection/Document/Child-Collection",
     "select": {
         "orderNumber": "omsOrderNumber",
         "country": "attributes.country",
