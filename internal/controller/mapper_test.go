@@ -17,28 +17,28 @@ func Test_filterSelectedFields(t *testing.T) {
 		want []interface{}
 	}{
 		{
-			name: "Test 1",
+			name: "Test all fields",
 			args: args{
 				selected: map[string]string{
-					"orderNumber": "data.order.orderNumber",
-					"customer":    "data.order.customer.firstName",
-					"product":     "data.order.orderLines[n].product.productName",
-					//"customInfo":  "data.order.orderLines[n].customInfo[name=size].value[0]",
+					"orderNumber":    "data.order.orderNumber",
+					"isBool":         "data.order.customer.isBool",
+					"product":        "data.order.orderLines[n].product.productName",
+					"customInfoSize": "data.order.orderLines[n].customInfo[name=size].value[0]",
 				},
 				rows: getRowData(),
 			},
 			want: []interface{}{
 				map[string]interface{}{
-					"orderNumber": "123",
-					"customer":    "John",
-					"product":     []string{"Product_1", "Product_2"},
-					//"customInfo":  []string{"big"},
+					"orderNumber":    123,
+					"isBool":         true,
+					"product":        []interface{}{"Product_1", "Product_2"},
+					"customInfoSize": []interface{}{"big"},
 				},
 				map[string]interface{}{
-					"orderNumber": "321",
-					"customer":    "Anthony",
-					"product":     []string{"Product_X", "Product_Y"},
-					//"customInfo":  []string{"big"},
+					"orderNumber":    321,
+					"isBool":         false,
+					"product":        []interface{}{"Product_X", "Product_Y"},
+					"customInfoSize": []interface{}{"grand"},
 				},
 			},
 		},
@@ -48,7 +48,7 @@ func Test_filterSelectedFields(t *testing.T) {
 			fields := filterSelectedFields(tt.args.selected, tt.args.rows)
 			for w := range tt.want {
 				for k, v := range tt.want[w].(map[string]interface{}) {
-					if !reflect.DeepEqual(fields[w].(map[string]interface{})[k], v.(interface{})) { // todo not working :(
+					if !reflect.DeepEqual(fields[w].(map[string]interface{})[k], v.(interface{})) {
 						t.Errorf("filterSelectedFields() = %v, want %v", fields[w].(map[string]interface{})[k], v)
 					}
 				}
@@ -62,9 +62,9 @@ func getRowData() []interface{} {
 		map[string]interface{}{
 			"data": map[string]interface{}{
 				"order": map[string]interface{}{
-					"orderNumber": "123",
+					"orderNumber": 123,
 					"customer": map[string]interface{}{
-						"firstName": "John",
+						"isBool": true,
 					},
 					"orderLines": []interface{}{
 						map[string]interface{}{
@@ -93,9 +93,9 @@ func getRowData() []interface{} {
 		map[string]interface{}{
 			"data": map[string]interface{}{
 				"order": map[string]interface{}{
-					"orderNumber": "321",
+					"orderNumber": 321,
 					"customer": map[string]interface{}{
-						"firstName": "Anthony",
+						"isBool": false,
 					},
 					"orderLines": []interface{}{
 						map[string]interface{}{
